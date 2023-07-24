@@ -1,12 +1,8 @@
 import datetime as dt
-from abc import ABC, abstractmethod
-
-DATE_FORMAT = "%d.%m.%Y"
-USD_RATE = 90.38
-EURO_RATE = 100.66
+from typing import Optional
 
 
-class Calculator(ABC):
+class Calculator:
     def __init__(self, limit: int):
         self.limit = limit
         self.records = []
@@ -15,67 +11,50 @@ class Calculator(ABC):
         self.records.append(record)
 
     def get_today_stats(self) -> int:
-        return sum(record.amount for record in self.records)
+        return sum(record.amount for record in self.records if record.date == dt.datetime.now().date())
 
-    @abstractmethod
-    def get_week_stats(self) -> str:
-        pass
+    def get_week_stats(self) -> int:
+        seven_days_ago = dt.datetime.now().date() - dt.timedelta(weeks=1)
+        return sum(
+            [record.amount for record in self.records if dt.datetime.now().date() >= record.date >= seven_days_ago])
 
 
 class CaloriesCalculator(Calculator):
     def get_calories_remained(self) -> str:
-        today_spent = sum(record.amount for record in self.records if record.date == dt.datetime.now().date())
+        today_spent = self.get_today_stats()
 
         if self.limit > today_spent:
             return f"Сегодня можно съесть что-нибудь ещё, но с общей калорийностью не более {self.limit - today_spent} кКал"
-        else:
-            return "Хватит есть!"
-
-    def get_week_stats(self, currency: str) -> str:
-        seven_days_ago = dt.datetime.now().date() - dt.timedelta(days=7)
-        week_spent = sum([record.amount for record in self.records if record.date > seven_days_ago])
-        return f"За последние семь дней вы получили {week_spent} кКал"
+        return "Хватит есть!"
 
 
 class CashCalculator(Calculator):
+    USD_RATE = 72.92
+    EURO_RATE = 86.58
+
     def get_today_cash_remained(self, currency: str) -> str:
-        today_spent = sum(record.amount for record in self.records if record.date == dt.datetime.now().date())
+        currencies = {"rub": ("руб", 1),
+                      "usd": ("USD", self.USD_RATE),
+                      "eur": ("Euro", self.EURO_RATE)}
+        balance = self.limit - self.get_today_stats()
+        currency_name, currency_rate = currencies[currency]
+        convert_balance = balance / currency_rate
 
-        if currency == "rub":
-            currency = "руб"
-            self.current_limit = self.limit
-        elif currency == "usd":
-            currency = "USD"
-            self.current_limit = self.limit / USD_RATE
-            today_spent = today_spent / USD_RATE
-        else:
-            currency = "Euro"
-            self.current_limit = self.limit / EURO_RATE
-            today_spent = today_spent / EURO_RATE
-
-        if self.limit > today_spent:
-            return f"На сегодня осталось {self.current_limit - today_spent:.2f} {currency}"
-        elif self.limit == today_spent:
+        if convert_balance > 0:
+            return f"На сегодня осталось {convert_balance:.2f} {currency_name}"
+        elif convert_balance == 0:
             return "Денег нет, держись"
         else:
-            return f"Денег нет, держись: твой долг - {today_spent - self.current_limit} {currency}"
-
-    def get_week_stats(self, currency: str) -> str:
-        seven_days_ago = dt.datetime.now().date() - dt.timedelta(days=7)
-        week_spent = sum([record.amount for record in self.records if record.date > seven_days_ago])
-
-        if currency == "руб":
-            return f"За последние семь дней вы потратили {week_spent:.2f} {currency}"
-        elif currency == "usd":
-            return f"За последние семь дней вы потратили {week_spent / USD_RATE:.2f} {currency}"
-        else:
-            return f"За последние семь дней вы потратили {week_spent / EURO_RATE:.2f} {currency}"
+            return f"Денег нет, держись: твой долг - {abs(convert_balance):.2f} {currency_name}"
 
 
 class Record:
-    def __init__(self, amount: float, comment: str, date: str = dt.datetime.now().strftime(DATE_FORMAT)):
+    def __init__(self, amount: float, comment: str, date: Optional[str] = None):
         self.amount = amount
-        self.date = dt.date(*map(int, date.split(".")[::-1]))
+        if date:
+            self.date = dt.date(*map(int, date.split(".")[::-1]))
+        else:
+            self.date = dt.datetime.now().date()
         self.comment = comment
 
 
